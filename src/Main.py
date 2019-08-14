@@ -47,17 +47,17 @@ def calc_elo(win_team, lose_team):
     loser_elo = get_elo(lose_team)
 
     elo_diff = winner_elo - loser_elo
-    exp = (elo_diff * -1) / 400
+    exp = -elo_diff / 400
     odds = 1 / (1 + math.pow(10, exp))
     # 根据rank级别修改K值
     if winner_elo < 2100:
-        k = 32
+        k = 4*8
     elif 2100 <= winner_elo < 2400:
-        k = 24
+        k = 3*8
     else:
-        k = 16
+        k = 2*8
 
-    # 更新 rank 数值
+    # 更新 elo 数值
     new_winner_elo = round(winner_elo + (k * (1 - odds)))
     new_loser_elo = round(loser_elo + (k * (0 - odds)))
     return new_winner_elo, new_loser_elo
@@ -108,28 +108,30 @@ def build_dataSet(all_data):
         #     skip = 1
 
         # 根据这场比赛的数据，   计算更新队伍的elo值
-        new_winner_rank, new_loser_rank = calc_elo(Wteam, Lteam)
-        team_elos[Wteam] = new_winner_rank
-        team_elos[Lteam] = new_loser_rank
+        new_winner_elo, new_loser_elo = calc_elo(Wteam, Lteam)
+        team_elos[Wteam] = new_winner_elo
+        team_elos[Lteam] = new_loser_elo
 
     return np.nan_to_num(X), y
 
 
 # 预测胜利者
-def predict_winner(team_1, team_2, model):
+def predict_winner(visterTeam, hostTeam, model):
     features = []
 
-    # team 1，客场队伍
-    features.append(get_elo(team_1))
-    for key, value in team_stats.loc[team_1].iteritems():
+    # team 1，客场队伍，拼接其特征值
+    features.append(get_elo(visterTeam))
+    for key, value in team_stats.loc[visterTeam].iteritems():
         features.append(value)
 
-    # team 2，主场队伍
-    features.append(get_elo(team_2) + 100)
-    for key, value in team_stats.loc[team_2].iteritems():
+    # team 2，主场队伍，拼接其特征值
+    features.append(get_elo(hostTeam) + 100)
+    for key, value in team_stats.loc[hostTeam].iteritems():
         features.append(value)
 
+    #处理空数据，NaN填0
     features = np.nan_to_num(features)
+    #预测可能性
     return model.predict_proba([features])
 
 
@@ -148,30 +150,37 @@ if __name__ == '__main__':
 
     # 训练网络模型
     print("Fitting on %d game samples.." % len(X))
+    #初始化一个模型
     model = linear_model.LogisticRegression()
+    # 填入数据
     model.fit(X, y)
 
     # 利用10折交叉验证计算训练正确率
     print("Doing cross-validation..")
+    #依据数据统计，构建了一个模型
     print(cross_val_score(model, X, y, cv=10, scoring='accuracy', n_jobs=-1).mean())
 
     # 利用训练好的model在16-17年的比赛中进行预测
     print('Predicting on new schedule..')
     schedule1617 = pd.read_csv(folder + '/16-17Schedule.csv')
     result = []
+    #循环未来所有的赛事安排
     for index, row in schedule1617.iterrows():
         visterTeam = row['Vteam']
         hostTeam = row['Hteam']
+        #预测胜利者
         pred = predict_winner(visterTeam, hostTeam, model)
         prob = pred[0][0]
         if prob > 0.5:
+            #如果可能性超过50%
             winner = visterTeam
             loser = hostTeam
             result.append([winner, loser, prob])
         else:
+            # 如果可能性不超过50%
             winner = hostTeam
             loser = visterTeam
-            result.append([winner, loser, 1 - prob])
+            result.append([winner, loser, (1 - prob)])
 
     with open(folder + '/16-17Result.csv', 'w') as f:
         writer = csv.writer(f)

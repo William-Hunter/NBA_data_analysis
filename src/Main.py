@@ -43,24 +43,24 @@ def get_elo(team):
 
 # 计算每个球队的elo值
 def calc_elo(win_team, lose_team):
-    winner_rank = get_elo(win_team)
-    loser_rank = get_elo(lose_team)
+    winner_elo = get_elo(win_team)
+    loser_elo = get_elo(lose_team)
 
-    rank_diff = winner_rank - loser_rank
-    exp = (rank_diff * -1) / 400
+    elo_diff = winner_elo - loser_elo
+    exp = (elo_diff * -1) / 400
     odds = 1 / (1 + math.pow(10, exp))
     # 根据rank级别修改K值
-    if winner_rank < 2100:
+    if winner_elo < 2100:
         k = 32
-    elif winner_rank >= 2100 and winner_rank < 2400:
+    elif 2100 <= winner_elo < 2400:
         k = 24
     else:
         k = 16
 
     # 更新 rank 数值
-    new_winner_rank = round(winner_rank + (k * (1 - odds)))
-    new_loser_rank = round(loser_rank + (k * (0 - odds)))
-    return new_winner_rank, new_loser_rank
+    new_winner_elo = round(winner_elo + (k * (1 - odds)))
+    new_loser_elo = round(loser_elo + (k * (0 - odds)))
+    return new_winner_elo, new_loser_elo
 
 
 # 构建数据集合

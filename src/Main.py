@@ -20,6 +20,10 @@ import random
 import numpy as np
 from sklearn import linear_model
 from sklearn.model_selection import cross_val_score
+import glob
+import os
+
+
 
 # 当每支队伍没有elo等级分时，赋予其基础elo等级分
 base_elo = 1600
@@ -32,16 +36,31 @@ folder = '../data'
 
 
 # 根据每支队伍的Miscellaneous Opponent，Team统计数据csv文件进行初始化
-def initialize_data(Mstat, Ostat, Tstat):
-    # 移除不需要的列
-    new_Mstat = Mstat.drop(['Rk', 'Arena'], axis=1)
-    new_Ostat = Ostat.drop(['Rk', 'G', 'MP'], axis=1)
-    new_Tstat = Tstat.drop(['Rk', 'G', 'MP'], axis=1)
+def initialize_data():
+    # 先读取三个表，获取到每个队的表现数据
+    # 移除不需要的列，将三个表，左对齐，合并起来
 
-    # 将三个表，左对齐，合并起来
-    team_stats1 = pd.merge(new_Mstat, new_Ostat, how='left', on='Team')
-    team_stats1 = pd.merge(team_stats1, new_Tstat, how='left', on='Team')
-    return team_stats1.set_index('Team', inplace=False, drop=True)
+    first = 1
+    for csvFile in glob.glob(folder + "/Miscellaneous_Stat*.csv"):
+        new_Mstat=pd.read_csv(csvFile).drop(['Rk', 'Arena'], axis=1)
+        if first == 1:
+            old_team_stats = new_Mstat
+        else:
+            old_team_stats = pd.merge(old_team_stats, new_Mstat, how='left', on='Team')
+        first=0
+        #Mstat_array.append(new_Mstat)
+
+    for csvFile in glob.glob(folder + "/Opponent_Per_Game_Stat*.csv"):
+        new_Ostat=pd.read_csv(csvFile).drop(['Rk', 'G', 'MP'], axis=1)
+        old_team_stats = pd.merge(old_team_stats, new_Ostat, how='left', on='Team')
+        #Ostat_array.append()
+
+    for csvFile in glob.glob(folder + "/Team_Per_Game_Stat*.csv"):
+        new_Tstat=pd.read_csv(csvFile).drop(['Rk', 'G', 'MP'], axis=1)
+        old_team_stats = pd.merge(old_team_stats, new_Tstat, how='left', on='Team')
+        # Tstat_array.append()
+
+    return old_team_stats.set_index('Team', inplace=False, drop=True)
 
 
 # 获取每支队伍的Elo Score等级分函数
@@ -79,8 +98,7 @@ def calc_elo(win_team, lose_team):
 # 构建数据集合
 def build_dataSet(all_data):
     print("Building data set..")
-    X = []
-    skip = 0
+    # global X,y
     # 循环所有的比赛结果记录
     for index, row in all_data.iterrows():
         # 获取胜者和败者
@@ -109,23 +127,22 @@ def build_dataSet(all_data):
 
         # 将两支队伍的特征值随机的分配在每场比赛数据的左右两侧
         # 并将对应的0/1赋给y值
+
         if random.random() > 0.5:
             X.append(win_team_features + lose_team_features)
+            # X=np.append(X, win_team_features + lose_team_features)
             y.append(0)
         else:
             X.append(lose_team_features + win_team_features)
+            # X=np.append(X, lose_team_features + win_team_features)
             y.append(1)
-
-        # if skip == 0:
-        # print('X',X)
-        #     skip = 1
 
         # 根据这场比赛的数据，   计算更新队伍的elo值
         new_winner_elo, new_loser_elo = calc_elo(Wteam, Lteam)
         team_elos[Wteam] = new_winner_elo
         team_elos[Lteam] = new_loser_elo
 
-    return np.nan_to_num(X), y
+    # return , y
 
 
 # 预测胜利者
@@ -149,18 +166,16 @@ def predict_winner(visterTeam, hostTeam, model):
 
 
 if __name__ == '__main__':
-    # 先读取三个表，获取到每个队的表现数据
-    Mstat = pd.read_csv(folder + '/15-16Miscellaneous_Stat.csv')
-    Ostat = pd.read_csv(folder + '/15-16Opponent_Per_Game_Stat.csv')
-    Tstat = pd.read_csv(folder + '/15-16Team_Per_Game_Stat.csv')
-    # 然后合并在一起
-    team_stats = initialize_data(Mstat, Ostat, Tstat)
+    # # 然后合并数据在一起
+    team_stats = initialize_data()
 
-    # 读取比赛结果表
-    result_data = pd.read_csv(folder + '/15-16_result.csv')
-    # 构建结果集合
-    X, y = build_dataSet(result_data)
+    for csvFile in glob.glob(folder + "/Game_Result*.csv"):
+        # 读取比赛结果表
+        result_data = pd.read_csv(csvFile)
+        # 构建结果集合
+        build_dataSet(result_data)
 
+    X=np.nan_to_num(X)
     # 训练网络模型
     print("Fitting on %d game samples.." % len(X))
     #初始化一个逻辑回归模型
@@ -175,7 +190,7 @@ if __name__ == '__main__':
 
     # 利用训练好的model在16-17年的比赛中进行预测
     print('Predicting on new schedule..')
-    schedule1617 = pd.read_csv(folder + '/16-17Schedule.csv')
+    schedule1617 = pd.read_csv(folder + '/Future_Schedule.csv')
     result = []
     #循环未来所有的赛事安排
     for index, row in schedule1617.iterrows():
@@ -188,17 +203,23 @@ if __name__ == '__main__':
             #如果可能性超过50%
             winner = visterTeam
             loser = hostTeam
-            result.append([winner, loser, prob])
+            probability=prob
+            # result.append([winner, loser, prob])
         else:
             # 如果可能性不超过50%
             winner = hostTeam
             loser = visterTeam
-            result.append([winner, loser, (1 - prob)])
+            probability = 1-prob
+            # result.append([winner, loser, (1 - prob)])
 
-    with open(folder + '/16-17Result.csv', 'w') as f:
-        writer = csv.writer(f)
-        writer.writerow(['win', 'lose', 'probability'])
-        writer.writerows(result)
-        print('done.')
+        schedule1617.set_value(index,"win",index)
+        schedule1617.set_value(index, "lose", index)
+        schedule1617.set_value(index, "probability", index)
+
+    # with open(folder + '/16-17Result.csv', 'w') as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(['win', 'lose', 'probability'])
+    #     writer.writerows(result)
+    #     print('done.')
 
     # pd.read_csv(folder+'16-17Result.csv',header=0)

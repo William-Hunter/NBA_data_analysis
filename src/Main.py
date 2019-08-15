@@ -1,5 +1,18 @@
 # -*- coding: utf-8 -*-
 
+"""
+先获取队伍状态表，队伍对手状态表，混合状态表，将三个表去掉不必要的列，按照队名对其，合并在一起
+
+然后循环内当年的所有赛事结果，根据结果和主客场作战去修改此队伍的elo值，这个elo和其队伍的各项指标构成了其特征值，
+每场赛事都会形成一个数组，循环完毕之后会形成一个二维数组,
+
+将这个二维数组装入逻辑回归模型内，然后进行交叉验证，
+
+然后获取将来的赛事安排，遍历所有赛事，每次获取主客队的elo分数和统计数据，形成特征值，
+然后通过这个模型去判断胜负率，
+"""
+
+
 import pandas as pd
 import math
 import csv
@@ -119,12 +132,12 @@ def build_dataSet(all_data):
 def predict_winner(visterTeam, hostTeam, model):
     features = []
 
-    # team 1，客场队伍，拼接其特征值
+    # team 1，客场队伍，获取其处理之后的elo，拼接其特征值
     features.append(get_elo(visterTeam))
     for key, value in team_stats.loc[visterTeam].iteritems():
         features.append(value)
 
-    # team 2，主场队伍，拼接其特征值
+    # team 2，主场队伍，获取其处理之后的elo，拼接其特征值
     features.append(get_elo(hostTeam) + 100)
     for key, value in team_stats.loc[hostTeam].iteritems():
         features.append(value)
@@ -150,14 +163,14 @@ if __name__ == '__main__':
 
     # 训练网络模型
     print("Fitting on %d game samples.." % len(X))
-    #初始化一个模型
+    #初始化一个逻辑回归模型
     model = linear_model.LogisticRegression()
     # 填入数据
     model.fit(X, y)
 
     # 利用10折交叉验证计算训练正确率
     print("Doing cross-validation..")
-    #依据数据统计，构建了一个模型
+    #进行交叉验证
     print(cross_val_score(model, X, y, cv=10, scoring='accuracy', n_jobs=-1).mean())
 
     # 利用训练好的model在16-17年的比赛中进行预测

@@ -12,7 +12,6 @@
 然后通过这个模型去判断胜负率，
 """
 
-
 import pandas as pd
 import math
 import csv
@@ -22,8 +21,6 @@ from sklearn import linear_model
 from sklearn.model_selection import cross_val_score
 import glob
 import os
-
-
 
 # 当每支队伍没有elo等级分时，赋予其基础elo等级分
 base_elo = 1600
@@ -42,21 +39,21 @@ def initialize_data():
 
     first = 1
     for csvFile in glob.glob(folder + "/Miscellaneous_Stat*.csv"):
-        new_Mstat=pd.read_csv(csvFile).drop(['Rk', 'Arena'], axis=1)
+        new_Mstat = pd.read_csv(csvFile).drop(['Rk', 'Arena'], axis=1)
         if first == 1:
             old_team_stats = new_Mstat
         else:
             old_team_stats = pd.merge(old_team_stats, new_Mstat, how='left', on='Team')
-        first=0
-        #Mstat_array.append(new_Mstat)
+        first = 0
+        # Mstat_array.append(new_Mstat)
 
     for csvFile in glob.glob(folder + "/Opponent_Per_Game_Stat*.csv"):
-        new_Ostat=pd.read_csv(csvFile).drop(['Rk', 'G', 'MP'], axis=1)
+        new_Ostat = pd.read_csv(csvFile).drop(['Rk', 'G', 'MP'], axis=1)
         old_team_stats = pd.merge(old_team_stats, new_Ostat, how='left', on='Team')
-        #Ostat_array.append()
+        # Ostat_array.append()
 
     for csvFile in glob.glob(folder + "/Team_Per_Game_Stat*.csv"):
-        new_Tstat=pd.read_csv(csvFile).drop(['Rk', 'G', 'MP'], axis=1)
+        new_Tstat = pd.read_csv(csvFile).drop(['Rk', 'G', 'MP'], axis=1)
         old_team_stats = pd.merge(old_team_stats, new_Tstat, how='left', on='Team')
         # Tstat_array.append()
 
@@ -83,11 +80,11 @@ def calc_elo(win_team, lose_team):
     odds = 1 / (1 + math.pow(10, exp))
     # 根据rank级别修改K值
     if winner_elo < 2100:
-        k = 4*8
+        k = 4 * 8
     elif 2100 <= winner_elo < 2400:
-        k = 3*8
+        k = 3 * 8
     else:
-        k = 2*8
+        k = 2 * 8
 
     # 更新 elo 数值
     new_winner_elo = round(winner_elo + (k * (1 - odds)))
@@ -159,9 +156,9 @@ def predict_winner(visterTeam, hostTeam, model):
     for key, value in team_stats.loc[hostTeam].iteritems():
         features.append(value)
 
-    #处理空数据，NaN填0
+    # 处理空数据，NaN填0
     features = np.nan_to_num(features)
-    #预测可能性
+    # 预测可能性
     return model.predict_proba([features])
 
 
@@ -175,51 +172,49 @@ if __name__ == '__main__':
         # 构建结果集合
         build_dataSet(result_data)
 
-    X=np.nan_to_num(X)
+    X = np.nan_to_num(X)
     # 训练网络模型
     print("Fitting on %d game samples.." % len(X))
-    #初始化一个逻辑回归模型
+    # 初始化一个逻辑回归模型
     model = linear_model.LogisticRegression()
     # 填入数据
     model.fit(X, y)
 
     # 利用10折交叉验证计算训练正确率
     print("Doing cross-validation..")
-    #进行交叉验证
+    # 进行交叉验证
     print(cross_val_score(model, X, y, cv=10, scoring='accuracy', n_jobs=-1).mean())
 
     # 利用训练好的model在16-17年的比赛中进行预测
     print('Predicting on new schedule..')
     schedule1617 = pd.read_csv(folder + '/Future_Schedule.csv')
     result = []
-    #循环未来所有的赛事安排
+    # 循环未来所有的赛事安排
     for index, row in schedule1617.iterrows():
-        visterTeam = row['Vteam']
-        hostTeam = row['Hteam']
-        #预测胜利者
+        visterTeam = row['Visitor/Neutral']
+        hostTeam = row['Home/Neutral']
+        # 预测胜利者
         pred = predict_winner(visterTeam, hostTeam, model)
         prob = pred[0][0]
         if prob > 0.5:
-            #如果可能性超过50%
+            # 如果可能性超过50%
             winner = visterTeam
             loser = hostTeam
-            probability=prob
-            # result.append([winner, loser, prob])
+            probability = prob
         else:
             # 如果可能性不超过50%
             winner = hostTeam
             loser = visterTeam
-            probability = 1-prob
-            # result.append([winner, loser, (1 - prob)])
+            probability = 1 - prob
 
-        schedule1617.set_value(index,"win",index)
-        schedule1617.set_value(index, "lose", index)
-        schedule1617.set_value(index, "probability", index)
+        result.append([row['Date'],row['Start (ET)'],visterTeam,row['PTS'], hostTeam,row['PTS'],row['Attend.'],
+                       row['Notes'],winner, loser, probability])
 
-    # with open(folder + '/16-17Result.csv', 'w') as f:
-    #     writer = csv.writer(f)
-    #     writer.writerow(['win', 'lose', 'probability'])
-    #     writer.writerows(result)
-    #     print('done.')
 
-    # pd.read_csv(folder+'16-17Result.csv',header=0)
+    with open(folder + '/18-19Result.csv', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Date","Start (ET)","Visitor/Neutral","PTS","Home/Neutral","PTS","Attend.","Notes",'win',
+                         'lose', 'probability'])
+        writer.writerows(result)
+        print('done.')
+
